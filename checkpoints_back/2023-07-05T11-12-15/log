@@ -1,0 +1,2 @@
+ Episode    Step     alpha     MeanReward     MeanLength MeanPolicyLoss      MeanQLoss     MeanQValue      TimeDelta                Time
+       0       0     1.000          0.000          0.000          0.000          0.000          0.000          1.975 2023-07-05T11:12:18
