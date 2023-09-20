@@ -14,15 +14,15 @@ class WarmEnv(MuJocoPyEnv, utils.EzPickle):
             "rgb_array",
             "depth_array",
         ],
-        "render_fps": 25,
+        "render_fps": 20,
     }
 
     def __init__(self, **kwargs):
-        observation_space = Box(low=-np.inf, high=np.inf, shape=(14,), dtype=np.float64)
+        observation_space = Box(low=-np.inf, high=np.inf, shape=(12,), dtype=np.float64)
         MuJocoPyEnv.__init__(
             self, 
             "warm.xml", #model path 
-            4, #skip frame
+            5, #skip frame
             observation_space=observation_space, #observation space
             **kwargs
         )
@@ -30,6 +30,7 @@ class WarmEnv(MuJocoPyEnv, utils.EzPickle):
 
     def step(self, a):
         ctrl_cost_coeff = 0.0001
+        a = [i*27.79 for i in a] #add ctrlgain (change at xmlfile)
         xposbefore = self.sim.data.qpos[0]
         self.do_simulation(a, self.frame_skip)
         xposafter = self.sim.data.qpos[0]
@@ -38,6 +39,15 @@ class WarmEnv(MuJocoPyEnv, utils.EzPickle):
             
         reward_ctrl = -ctrl_cost_coeff * np.square(a).sum()
         reward = [reward_fwd, reward_ctrl]
+        done = False
+        if self.data.sensordata[0] or self.data.sensordata[1]:
+            done = True
+        
+        if xposafter > 0:
+            direction = -1
+        else:
+            direction = 1
+        
         ob = self._get_obs()
 
         if self.render_mode == "human":
@@ -46,17 +56,16 @@ class WarmEnv(MuJocoPyEnv, utils.EzPickle):
         return (
             ob,
             reward,
-            False,
-            False,
+            done,
+            direction,
             dict(reward_fwd=reward_fwd, reward_ctrl=reward_ctrl),
         )
 
     def _get_obs(self):
         qpos = self.sim.data.qpos
         qvel = self.sim.data.qvel
-        sensordata = self.data.sensordata
         
-        return np.concatenate([qpos.flat[2:5], qpos.flat[13:15], qvel.flat[:5], qvel.flat[13:15], sensordata.flat[:]])
+        return np.concatenate([qpos.flat[2:5], qpos.flat[13:15], qvel.flat[:5], qvel.flat[13:15]])
     
     def get_initpos(self):        
         return self.sim.data.qpos.flat[:]

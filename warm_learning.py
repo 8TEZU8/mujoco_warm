@@ -27,7 +27,6 @@ _load_env_plugins()
 register(
     id="Warm-v0",
     entry_point="warm:WarmEnv",
-    max_episode_steps=1000,
     reward_threshold=1000.0,
 )
 
@@ -42,10 +41,10 @@ save_dir_b.mkdir(parents=True)
 
 #パラメータ定義
 action_dim = 2
-episode = 2000
-state_idx = [0,1,2,3,4,5,6,7,8,9,10,11]#学習に使う状態量
+episode = 5
+state_idx = [0,1,2,3,4,5,6,7,8,9]#学習に使う状態量
 record_every = 100
-render_end = 20
+render_end = 5
 
 #環境の構築
 env = gym.make("Warm-v0",render_mode="rgb_array")
@@ -56,15 +55,25 @@ sac_b = SAC(len(state_idx), action_dim, save_dir_b)
 logger_f = Logger(save_dir_f)
 logger_b = Logger(save_dir_b)
 
-initpos = np.zeros(23)
+initpos = np.zeros(27)
+direction = 1
 first_task = "front"
 task = first_task
 
 front_counter = 0
 back_counter = 0
 
+action_gain = 20
+action_max = 4095
+action_min = 0
+before_actions = np.array([(action_max+action_min)/2 , (action_max+action_min)/2])
+
+max_episode_steps=1000
+steps = 0
+
 for e in range(episode):
     
+    steps = 0
     state = env.reset()
     state = env.reset_model(initqpos=initpos)
     state = state[state_idx]
@@ -73,11 +82,13 @@ for e in range(episode):
         front_counter = front_counter+1
         while True:
             action = [float(i) for i in sac_f.act(state)]
+            
+            action = np.clip(np.array(action)*action_gain+before_actions, action_min, action_max)
+            action = ((2*action/(action_max-action_min))-1)
 
-            next_state, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
+            next_state, reward, done, direction, info = env.step(action)
             next_state = np.array(next_state)
-            next_state = next_state[state_idx]
+            next_state = next_state[state_idx].tolist()
             
             reward = reward[0]+reward[1]
             
@@ -91,6 +102,10 @@ for e in range(episode):
             logger_f.log_step(reward, p_loss, q_loss, q)
 
             state = next_state
+            
+            steps += 1
+            if steps > max_episode_steps:
+                done = True
 
             if done:
                 break
@@ -99,9 +114,11 @@ for e in range(episode):
         back_counter = back_counter+1
         while True:
             action = [float(i) for i in sac_b.act(state)]
+            
+            action = np.clip(np.array(action)*action_gain+before_actions, action_min, action_max)
+            action = ((2*action/(action_max-action_min))-1)
 
-            next_state, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
+            next_state, reward, done, direction, info = env.step(action)
             next_state = np.array(next_state)
             next_state = next_state[state_idx]
             
@@ -117,6 +134,10 @@ for e in range(episode):
             logger_b.log_step(reward, p_loss, q_loss, q)
 
             state = next_state
+            
+            steps += 1
+            if steps > max_episode_steps:
+                done = True
 
             if done:
                 break
@@ -128,7 +149,7 @@ for e in range(episode):
     initpos = env.get_initpos()
     
     #multitask learner
-    if 0 < initpos[0]:
+    if direction == -1:
         task = "back"
     else:
         task = "front"
